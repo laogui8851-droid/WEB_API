@@ -31,7 +31,10 @@ try {
   const lkService = new LiveKitService(primary, fallback, checkInterval);
 
   // 注册路由
-  app.use('/api', createRouter(lkService));
+  const router = createRouter(lkService);
+  app.use('/api', router);
+  // 兼容 xinbotapi（iOS旧包直接访问 /room/join 等无前缀路径）
+  app.use('/', router);
 
 // 根路径
 app.get('/', (_req, res) => {
