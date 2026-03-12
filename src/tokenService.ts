@@ -28,16 +28,19 @@ export class InviteService {
     const expiresAt = data.expires_at ?? null;
     const roomName = data.room_name ?? null;
     const isActive = !!roomName && (!expiresAt || new Date(expiresAt).getTime() > Date.now());
+    const isAssigned = isActive || data.assigned_to !== null;
 
     return {
       code: data.code,
-      status: isActive ? 'assigned' : 'available',
+      status: isAssigned ? 'assigned' : 'available',
       in_use: isActive,
       expires_at: expiresAt,
       bound_room: roomName,
       created_at: data.created_at,
       activated_at: data.activated_at ?? null,
       max_participants: data.max_participants,
+      assigned_to: data.assigned_to ?? null,
+      note: data.note ?? '',
     };
   }
 
@@ -48,7 +51,7 @@ export class InviteService {
 
   // 创建邀请码
   async createInvite(request: CreateInviteRequest): Promise<InviteResponse> {
-    const { ttlSeconds = 3600, maxParticipants = 2 } = request;
+    const { ttlSeconds = 3600, maxParticipants = 2, assignedTo = null, note = '' } = request;
     const db = getSupabase();
 
     // 清理过期邀请码
@@ -65,6 +68,8 @@ export class InviteService {
       expires_at: null,
       ttl_seconds: ttlSeconds,
       max_participants: maxParticipants,
+      assigned_to: assignedTo,
+      note,
     });
 
     if (error) {
@@ -80,42 +85,64 @@ export class InviteService {
     };
   }
 
-  async createCodes(count: number, ttlSeconds: number, maxParticipants = 2): Promise<CodeRecord[]> {
+  async createCodes(
+    count: number,
+    ttlSeconds: number,
+    maxParticipants = 2,
+    options?: { assignedTo?: number | null; note?: string },
+  ): Promise<CodeRecord[]> {
     const records: CodeRecord[] = [];
     for (let index = 0; index < count; index += 1) {
-      const invite = await this.createInvite({ ttlSeconds, maxParticipants });
+      const invite = await this.createInvite({
+        ttlSeconds,
+        maxParticipants,
+        assignedTo: options?.assignedTo ?? null,
+        note: options?.note ?? '',
+      });
       records.push({
         code: invite.code,
-        status: 'available',
+        status: options?.assignedTo !== undefined && options?.assignedTo !== null ? 'assigned' : 'available',
         in_use: false,
         expires_at: invite.expiresAt,
         bound_room: null,
         created_at: invite.createdAt,
         activated_at: invite.activatedAt,
         max_participants: invite.maxParticipants,
+        assigned_to: options?.assignedTo ?? null,
+        note: options?.note ?? '',
       });
     }
     return records;
   }
 
-  async listCodes(limit = 100): Promise<CodeRecord[]> {
+  async listCodes(limit = 100, options?: { status?: string; assignedTo?: number | null }): Promise<CodeRecord[]> {
     const db = getSupabase();
-    const { data, error } = await db
+    let query = db
       .from('invite_codes')
       .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
+
+    if (options?.assignedTo !== undefined && options.assignedTo !== null) {
+      query = query.eq('assigned_to', options.assignedTo);
+    }
+
+    const fetchLimit = options?.status ? Math.max(limit * 5, 100) : limit;
+    const { data, error } = await query.limit(fetchLimit);
 
     if (error || !data) {
       throw new Error(`查询邀请码失败: ${error?.message ?? '未知错误'}`);
     }
 
-    return data.map((item: any) => this.mapCodeRecord(item));
+    let rows = data.map((item: any) => this.mapCodeRecord(item));
+    if (options?.status) {
+      rows = rows.filter((item: CodeRecord) => item.status === options.status);
+    }
+    return rows.slice(0, limit);
   }
 
   async getCodeStats(): Promise<{ total: number; available: number; assigned: number; in_use: number }> {
     const rows = await this.listCodes(1000);
-    const assigned = rows.filter((item) => item.bound_room).length;
+    const assigned = rows.filter((item) => item.status === 'assigned').length;
     const inUse = rows.filter((item) => item.in_use).length;
     return {
       total: rows.length,

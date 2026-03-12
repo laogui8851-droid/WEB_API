@@ -1,10 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 import { LiveKitService } from './livekitService';
 import { createRouter } from './routes';
 import { initSupabase } from './database';
 import { readIntEnv, readOptionalServerConfig, requireEnv } from './env';
+import { startPaymentMonitor } from './paymentMonitor';
 
 dotenv.config();
 
@@ -32,6 +35,15 @@ try {
 
   // 注册路由
   const router = createRouter(lkService);
+  const adminConsoleDir = path.resolve(__dirname, '..', '..', 'HUIYI_ADMIN');
+
+  if (fs.existsSync(adminConsoleDir)) {
+    app.use('/admin', express.static(adminConsoleDir));
+    app.get('/admin', (_req, res) => {
+      res.redirect('/admin/');
+    });
+  }
+
   app.use('/api', router);
   // 兼容 xinbotapi（iOS旧包直接访问 /room/join 等无前缀路径）
   app.use('/', router);
@@ -51,6 +63,8 @@ app.get('/', (_req, res) => {
       console.log('备用服务器: 未配置');
     }
   });
+
+  startPaymentMonitor(lkService.getInviteService());
 
   process.on('SIGTERM', () => {
     lkService.destroy();

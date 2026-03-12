@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { LiveKitService } from './livekitService';
 import { CreateInviteRequest, JoinRequest } from './models';
 import { requireEnv } from './env';
+import { registerBackofficeRoutes } from './backofficeRouter';
+import { createConsoleToken, isConsoleLoginConfigured, readBearerToken, verifyConsoleToken } from './consoleAuth';
 
 export function createRouter(lkService: LiveKitService): Router {
   const router = Router();
@@ -14,6 +16,18 @@ export function createRouter(lkService: LiveKitService): Router {
   };
 
   const requireAdmin = (req: Request, res: Response, next: () => void) => {
+    const bearerToken = readBearerToken(req.headers.authorization);
+    if (bearerToken) {
+      try {
+        verifyConsoleToken(bearerToken);
+        next();
+        return;
+      } catch {
+        res.status(401).json({ error: '登录已失效，请重新登录' });
+        return;
+      }
+    }
+
     const secret =
       (req.headers['x-api-secret'] as string | undefined) ||
       (req.headers['x-api-key'] as string | undefined);
@@ -46,6 +60,31 @@ export function createRouter(lkService: LiveKitService): Router {
     };
   };
 
+  router.post('/console/auth/login', (req: Request, res: Response) => {
+    try {
+      if (!isConsoleLoginConfigured()) {
+        res.status(503).json({ error: '后台登录未配置，请联系管理员设置环境变量' });
+        return;
+      }
+
+      const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
+      const password = typeof req.body.password === 'string' ? req.body.password : '';
+      if (!username || !password) {
+        res.status(400).json({ error: '缺少账号或密码' });
+        return;
+      }
+
+      const token = createConsoleToken(username, password);
+      res.json({ ok: true, token, username });
+    } catch (error) {
+      res.status(401).json({ error: (error as Error).message });
+    }
+  });
+
+  router.get('/console/auth/me', requireAdmin, (_req: Request, res: Response) => {
+    res.json({ ok: true });
+  });
+
   router.use(ensureHealthy);
 
   // ====== 公开会议接口（xinbotapi 兼容） ======
@@ -74,6 +113,7 @@ export function createRouter(lkService: LiveKitService): Router {
       res.json({
         serverUrl: result.url,
         token: result.token,
+        participantToken: result.token,
         server: 'primary',
         code: code.trim().toUpperCase(),
         roomName: result.roomName,
@@ -203,7 +243,14 @@ export function createRouter(lkService: LiveKitService): Router {
       const count = Number(req.body.count ?? 1);
       const expireMinutes = Number(req.body.expire_minutes ?? 720);
       const maxParticipants = Number(req.body.maxParticipants ?? 2);
-      const codes = await inviteService.createCodes(count, expireMinutes * 60, maxParticipants);
+      const assignedTo = req.body.assigned_to === undefined || req.body.assigned_to === null || req.body.assigned_to === ''
+        ? null
+        : Number(req.body.assigned_to);
+      const note = typeof req.body.note === 'string' ? req.body.note : '';
+      const codes = await inviteService.createCodes(count, expireMinutes * 60, maxParticipants, {
+        assignedTo,
+        note,
+      });
       res.json({ ok: true, created: codes.length, codes });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
@@ -213,7 +260,14 @@ export function createRouter(lkService: LiveKitService): Router {
   router.get('/codes', requireAdmin, async (req: Request, res: Response) => {
     try {
       const limit = Number(req.query.limit ?? 100);
-      const codes = await inviteService.listCodes(limit);
+      const status = typeof req.query.status === 'string' ? req.query.status.trim() : undefined;
+      const assignedTo = req.query.assigned_to === undefined || req.query.assigned_to === null || req.query.assigned_to === ''
+        ? null
+        : Number(req.query.assigned_to);
+      const codes = await inviteService.listCodes(limit, {
+        status,
+        assignedTo,
+      });
       res.json({ ok: true, count: codes.length, codes });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
@@ -333,7 +387,14 @@ export function createRouter(lkService: LiveKitService): Router {
   router.get('/rooms', requireAdmin, async (_req: Request, res: Response) => {
     try {
       const rooms = await lkService.listRooms();
-      res.json({ ok: true, rooms });
+      res.json({
+        ok: true,
+        rooms: rooms.map((room) => ({
+          ...room,
+          num_participants: room.numParticipants,
+          creation_time: room.createdAt,
+        })),
+      });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
@@ -432,6 +493,8 @@ export function createRouter(lkService: LiveKitService): Router {
       res.status(500).json({ error: (err as Error).message });
     }
   });
+
+  registerBackofficeRoutes(router, requireAdmin, inviteService);
 
   return router;
 }
