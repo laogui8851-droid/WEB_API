@@ -15,6 +15,7 @@ export interface CreateInviteRequest {
   ttlSeconds?: number;       // 有效期，默认 3600 秒（1小时）
   maxParticipants?: number;  // 最大人数，默认 2
   assignedTo?: number | null;
+  assignedName?: string;
   note?: string;
 }
 
@@ -53,6 +54,7 @@ export interface CodeRecord {
   activated_at: string | null;
   max_participants: number;
   assigned_to: number | null;
+  assigned_name: string;
   note: string;
 }
 

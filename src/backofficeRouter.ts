@@ -28,6 +28,7 @@ import {
   removeAdmin,
   removePackage,
   removeSaleBot,
+  setAppConfigValue,
   setSetting,
   unbindBotUser,
 } from './adminStore';
@@ -256,7 +257,10 @@ export function registerBackofficeRoutes(
       return;
     }
 
-    const ok = (await setSetting('api_url_main', url)) && (await setSetting('api_url', url));
+    const ok =
+      (await setSetting('api_url_main', url)) &&
+      (await setSetting('api_url', url)) &&
+      (await setAppConfigValue('api_url', url));
     if (!ok) {
       res.status(500).json({ error: '保存主接口失败' });
       return;

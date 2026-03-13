@@ -540,6 +540,13 @@ export async function setSetting(key: string, value: string): Promise<boolean> {
   return !error;
 }
 
+export async function setAppConfigValue(key: string, value: string): Promise<boolean> {
+	const { error } = await getSupabase()
+		.from('app_config')
+		.upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+	return !error;
+}
+
 export async function deleteSetting(key: string): Promise<boolean> {
   const { error } = await getSupabase().from('tg_settings').delete().eq('key', key);
   return !error;

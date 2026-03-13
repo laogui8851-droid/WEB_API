@@ -246,9 +246,11 @@ export function createRouter(lkService: LiveKitService): Router {
       const assignedTo = req.body.assigned_to === undefined || req.body.assigned_to === null || req.body.assigned_to === ''
         ? null
         : Number(req.body.assigned_to);
+      const assignedName = typeof req.body.assigned_name === 'string' ? req.body.assigned_name.trim() : '';
       const note = typeof req.body.note === 'string' ? req.body.note : '';
       const codes = await inviteService.createCodes(count, expireMinutes * 60, maxParticipants, {
         assignedTo,
+        assignedName,
         note,
       });
       res.json({ ok: true, created: codes.length, codes });
@@ -264,9 +266,11 @@ export function createRouter(lkService: LiveKitService): Router {
       const assignedTo = req.query.assigned_to === undefined || req.query.assigned_to === null || req.query.assigned_to === ''
         ? null
         : Number(req.query.assigned_to);
+      const assignedName = typeof req.query.assigned_name === 'string' ? req.query.assigned_name.trim() : undefined;
       const codes = await inviteService.listCodes(limit, {
         status,
         assignedTo,
+        assignedName,
       });
       res.json({ ok: true, count: codes.length, codes });
     } catch (err) {

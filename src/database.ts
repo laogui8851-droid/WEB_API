@@ -28,12 +28,14 @@ CREATE TABLE IF NOT EXISTS invite_codes (
   ttl_seconds INTEGER NOT NULL,
   max_participants INTEGER NOT NULL DEFAULT 2,
   assigned_to BIGINT,
+  assigned_name TEXT NOT NULL DEFAULT '',
   note TEXT NOT NULL DEFAULT ''
 );
 
 ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS activated_at TIMESTAMPTZ;
 ALTER TABLE invite_codes ALTER COLUMN expires_at DROP NOT NULL;
 ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS assigned_to BIGINT;
+ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS assigned_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);

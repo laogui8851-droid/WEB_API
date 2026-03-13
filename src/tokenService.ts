@@ -32,7 +32,7 @@ export class InviteService {
 
     return {
       code: data.code,
-      status: isAssigned ? 'assigned' : 'available',
+      status: isAssigned || !!(data.assigned_name ?? '').trim() ? 'assigned' : 'available',
       in_use: isActive,
       expires_at: expiresAt,
       bound_room: roomName,
@@ -40,6 +40,7 @@ export class InviteService {
       activated_at: data.activated_at ?? null,
       max_participants: data.max_participants,
       assigned_to: data.assigned_to ?? null,
+      assigned_name: data.assigned_name ?? '',
       note: data.note ?? '',
     };
   }
@@ -51,7 +52,7 @@ export class InviteService {
 
   // 创建邀请码
   async createInvite(request: CreateInviteRequest): Promise<InviteResponse> {
-    const { ttlSeconds = 3600, maxParticipants = 2, assignedTo = null, note = '' } = request;
+    const { ttlSeconds = 3600, maxParticipants = 2, assignedTo = null, assignedName = '', note = '' } = request;
     const db = getSupabase();
 
     // 清理过期邀请码
@@ -69,6 +70,7 @@ export class InviteService {
       ttl_seconds: ttlSeconds,
       max_participants: maxParticipants,
       assigned_to: assignedTo,
+      assigned_name: assignedName,
       note,
     });
 
@@ -89,7 +91,7 @@ export class InviteService {
     count: number,
     ttlSeconds: number,
     maxParticipants = 2,
-    options?: { assignedTo?: number | null; note?: string },
+    options?: { assignedTo?: number | null; assignedName?: string; note?: string },
   ): Promise<CodeRecord[]> {
     const records: CodeRecord[] = [];
     for (let index = 0; index < count; index += 1) {
@@ -97,11 +99,12 @@ export class InviteService {
         ttlSeconds,
         maxParticipants,
         assignedTo: options?.assignedTo ?? null,
+        assignedName: options?.assignedName ?? '',
         note: options?.note ?? '',
       });
       records.push({
         code: invite.code,
-        status: options?.assignedTo !== undefined && options?.assignedTo !== null ? 'assigned' : 'available',
+        status: (options?.assignedTo !== undefined && options?.assignedTo !== null) || !!(options?.assignedName ?? '').trim() ? 'assigned' : 'available',
         in_use: false,
         expires_at: invite.expiresAt,
         bound_room: null,
@@ -109,13 +112,14 @@ export class InviteService {
         activated_at: invite.activatedAt,
         max_participants: invite.maxParticipants,
         assigned_to: options?.assignedTo ?? null,
+        assigned_name: options?.assignedName ?? '',
         note: options?.note ?? '',
       });
     }
     return records;
   }
 
-  async listCodes(limit = 100, options?: { status?: string; assignedTo?: number | null }): Promise<CodeRecord[]> {
+  async listCodes(limit = 100, options?: { status?: string; assignedTo?: number | null; assignedName?: string }): Promise<CodeRecord[]> {
     const db = getSupabase();
     let query = db
       .from('invite_codes')
@@ -124,6 +128,9 @@ export class InviteService {
 
     if (options?.assignedTo !== undefined && options.assignedTo !== null) {
       query = query.eq('assigned_to', options.assignedTo);
+    }
+    if (options?.assignedName) {
+      query = query.eq('assigned_name', options.assignedName);
     }
 
     const fetchLimit = options?.status ? Math.max(limit * 5, 100) : limit;
