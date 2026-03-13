@@ -252,21 +252,28 @@ export function registerBackofficeRoutes(
 
   router.put('/console/api-urls/main', requireAdmin, async (req: Request, res: Response) => {
     const url = normalizeHttpUrl(typeof req.body.url === 'string' ? req.body.url : '');
+    const secret = typeof req.body.secret === 'string' ? req.body.secret.trim() : null;
     if (!url) {
       res.status(400).json({ error: '接口地址格式错误，请以 http:// 或 https:// 开头' });
       return;
     }
 
-    const ok =
+    let ok =
       (await setSetting('api_url_main', url)) &&
       (await setSetting('api_url', url)) &&
       (await setAppConfigValue('api_url', url));
+
+    if (ok && secret !== null) {
+		ok =
+			(await setSetting('api_secret', secret)) &&
+			(await setAppConfigValue('api_key', secret));
+	}
     if (!ok) {
       res.status(500).json({ error: '保存主接口失败' });
       return;
     }
 
-    res.json({ ok: true, currentUrl: url, mainUrl: url });
+    res.json({ ok: true, currentUrl: url, mainUrl: url, hasSecret: secret !== null });
   });
 
   router.post('/console/api-urls/backups', requireAdmin, async (req: Request, res: Response) => {
