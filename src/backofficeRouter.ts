@@ -232,18 +232,21 @@ export function registerBackofficeRoutes(
   });
 
   router.get('/console/api-urls', requireAdmin, async (_req: Request, res: Response) => {
-    const [currentUrlRaw, mainUrlRaw, backups] = await Promise.all([
+    const [currentUrlRaw, mainUrlRaw, apiSecretRaw, backups] = await Promise.all([
       getSetting('api_url'),
       getSetting('api_url_main'),
+      getSetting('api_secret'),
       getSettingsByPrefix('api_url_backup'),
     ]);
 
     const currentUrl = normalizeHttpUrl(currentUrlRaw || '') || '';
     const mainUrl = normalizeHttpUrl(mainUrlRaw || '') || '';
+    const apiSecret = apiSecretRaw?.trim() || '';
 
     res.json({
       currentUrl,
       mainUrl,
+      apiSecret,
       backups: backups
         .map((item) => ({ key: item.key, value: normalizeHttpUrl(item.value) || '' }))
         .filter((item) => item.value),
